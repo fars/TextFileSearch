@@ -2,7 +2,6 @@
 ## Delphi
 ##################
 
-# Build results
 Win32/
 Win64/
 __history/ 
@@ -10,7 +9,7 @@ __history/
 *.identcache
 
 ##################
-## Windows Specific
+## Windows
 #########1########
 
 # Windows image file caches
