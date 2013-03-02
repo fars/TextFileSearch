@@ -1,0 +1,20 @@
+##################
+## Delphi
+##################
+
+# Build results
+Win32/
+Win64/
+__history/ 
+*.local
+*.identcache
+
+##################
+## Windows Specific
+#########1########
+
+# Windows image file caches
+Thumbs.db
+
+# Folder config file
+Desktop.ini
