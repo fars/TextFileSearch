@@ -35,25 +35,34 @@ type
     CurentFilePath    : String;
     SearchTextStr     : String;
     FResultFileName   : String;
+    ExtStr            : String;
     MotherForm        : TForm;
+    MutexPause        : THandle;
+    IsSrchInSubDir    : Boolean;
     procedure RecursiveDirectoryStrSearchProcesing(const DirPath: String);
   protected
     procedure Execute; override;
   public
-    constructor Create (const Path, SearchStr : String; const TheForm: TForm);
+    constructor Create (const Path, SearchStr, FileExtensions : String;
+                                                const TheForm: TForm;
+                                                const IsSrchInSubFolders : Boolean);
     property FileName : String read FResultFileName;
     property CurentPath : String read CurentFilePath;
 end;
 
 implementation
 
-constructor TFileSearchStringThread.Create (const Path, SearchStr : String; const TheForm: TForm);
+constructor TFileSearchStringThread.Create (const Path, SearchStr, FileExtensions : String;
+                                            const TheForm: TForm;
+                                            const IsSrchInSubFolders : Boolean);
 begin
   inherited Create (True);
   DirPathStr      := Path;
   SearchTextStr   := SearchStr;
   MotherForm      := TheForm;
-end;
+  ExtStr          := FileExtensions;
+  IsSrchInSubDir  := IsSrchInSubFolders;
+ end;
 
 procedure TFileSearchStringThread.Execute;
 begin
@@ -74,41 +83,51 @@ begin
 
   CurrentPath := IncludeTrailingBackslash(DirPath);
 
-  if FindFirst(CurrentPath + FILE_SEARCH_MASK, FILE_ATTRIBUTES, FileSearchrRec) = 0 then
-    try
-      repeat
+    if FindFirst(CurrentPath + FILE_SEARCH_MASK, FILE_ATTRIBUTES, FileSearchrRec) = 0 then
+      try
+        repeat
 
-        if self.Terminated = true then Exit;
+          if self.Terminated = true then Exit;
 
-        CurentFilePath := CurrentPath + FileSearchrRec.Name;
-        SendMessage (MotherForm.Handle, WM_CURRENT_FILE_PATH_SHOW, 0, 0);
+          CurentFilePath := CurrentPath + FileSearchrRec.Name;
+          SendMessage (MotherForm.Handle, WM_CURRENT_FILE_PATH_SHOW, 0, 0);
 
-        if IsStringFindInFile(CurentFilePath, SearchTextStr) then begin
-            FResultFileName :=  CurentFilePath;
-            SendMessage (MotherForm.Handle, WM_NEW_RESULT_ADD, 0, 0);
-        end;
+          if (ExtStr = '*.*') then begin
+            if IsStringFindInFile(CurentFilePath, SearchTextStr) then begin
+                FResultFileName :=  CurentFilePath;
+                SendMessage (MotherForm.Handle, WM_NEW_RESULT_ADD, 0, 0);
+            end;
+          end
+         else begin
+          if AnsiPos(ExtractFileExt(FileSearchrRec.Name), ExtStr) > 0 then
+            if IsStringFindInFile(CurentFilePath, SearchTextStr) then begin
+                FResultFileName :=  CurentFilePath;
+                SendMessage (MotherForm.Handle, WM_NEW_RESULT_ADD, 0, 0);
+            end;
+         end;
+        until FindNext(FileSearchrRec) <> 0;
+      finally
+        FindClose(FileSearchrRec);
+      end;
 
-      until FindNext(FileSearchrRec) <> 0;
-    finally
-      FindClose(FileSearchrRec);
-    end;
+  if IsSrchInSubDir then
+   if FindFirst(CurrentPath + FILE_SEARCH_MASK, DIR_ATTRIBUTES, FileSearchrRec) = 0 then
+      try
+        repeat
 
- if FindFirst(CurrentPath + FILE_SEARCH_MASK, DIR_ATTRIBUTES, FileSearchrRec) = 0 then
-    try
-      repeat
+          if self.Terminated = true then Exit;
 
-        if self.Terminated = true then Exit;
+          CurentFilePath := CurrentPath + FileSearchrRec.Name;
 
-        CurentFilePath := CurrentPath + FileSearchrRec.Name;
+          if ((FileSearchrRec.Attr and faDirectory) <> 0)
+                and (FileSearchrRec.Name <> '.')
+                and (FileSearchrRec.Name <> '..') then
+                RecursiveDirectoryStrSearchProcesing(CurentFilePath);
 
-        if ((FileSearchrRec.Attr and faDirectory) <> 0)
-              and (FileSearchrRec.Name <> '.')
-              and (FileSearchrRec.Name <> '..') then
-              RecursiveDirectoryStrSearchProcesing(CurentFilePath);
-      until FindNext(FileSearchrRec) <> 0;
-    finally
-      FindClose(FileSearchrRec);
-    end;
+        until FindNext(FileSearchrRec) <> 0;
+      finally
+        FindClose(FileSearchrRec);
+      end;
 
 end;
 

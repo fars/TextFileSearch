@@ -11,17 +11,11 @@
 ///         - add string localization via resourcestring/TcxLocalizer for components;
 ///         - write simple unit test cases using
 ///                DUnit (http://stackoverflow.com/questions/18291/unit-testing-in-delphi-how-are-you-doing-it)
-///         - add file extension filter mask(add ansiPos() of extracted file extension );
-///         - add to search extra file info like creation data/time, file attributes
+///         - add to search extra file info like modified data/time, file attributes
 ///                 using multi column listbox instead memo;
-///         - build in metropolis GUI style for win8;
-///         - save\load settings and components last state from ini/xml file
-///              like here http://stackoverflow.com/questions/3163586/best-way-to-save-restore-a-form-foss
-///         - add pause button to resume/suspend search tthtread;
-///         - add images to buttons;
+///           http://stackoverflow.com/questions/9209394/how-to-get-file-created-accessed-and-modified-dates-the-same-as-windows-propert
 ///         - make dll from search string thread module
 ///             (like http://delphi.about.com/od/windowsshellapi/a/dll_basics.htm);
-///         - add this project to github;
 ///         - fix bugs;
 ///
 
@@ -32,7 +26,8 @@ interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
-  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.FileCtrl, ShellAPI, SearchStringThread;
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.FileCtrl, ShellAPI, SearchStringThread,
+  Vcl.Buttons;
 
 function DeleteLineBreaksSpecialCharacters(const Str: string): string;
 
@@ -40,27 +35,33 @@ type
   TForm1 = class(TForm)
     StatusLabel: TLabel;
     EditSearchedText: TEdit;
-    ButtonStart: TButton;
-    ButtonStop: TButton;
     Label2: TLabel;
     Label3: TLabel;
     GroupBox1: TGroupBox;
     MemoSearchResults: TMemo;
     EditPath: TEdit;
-    ButtonDirSelect: TButton;
     Label1: TLabel;
-    CheckBox3: TCheckBox;
+    CheckBoxSubDirSrch: TCheckBox;
+    Edit1: TEdit;
+    Label4: TLabel;
+    BitBtnStart: TBitBtn;
+    BitBtnStop: TBitBtn;
+    BitBtn1: TBitBtn;
 
-    procedure ButtonDirSelectClick(Sender: TObject);
-    procedure ButtonStartClick(Sender: TObject);
-    procedure ButtonStopClick(Sender: TObject);
     procedure MemoSearchResultsDblClick(Sender: TObject);
     procedure OpenDirFromMemoLine(Memo : TCustomMemo);
+    procedure BitBtnStartClick(Sender: TObject);
+    procedure BitBtnStopClick(Sender: TObject);
+    procedure BitBtn1Click(Sender: TObject);
+    procedure FormClose(Sender: TObject; var Action: TCloseAction);
+    procedure FormCreate(Sender: TObject);
   private
     SearchThread : TFileSearchStringThread;
     procedure WMFileSearchStringFinishedHandler (var Msg : TMessage); message WM_FILE_SEARCH_STRING_FINISHED;
     procedure WMCurrentFilePathShowHandler (var Msg : TMessage); message WM_CURRENT_FILE_PATH_SHOW;
     procedure WMNewResultAddHandler (var Msg : TMessage); message WM_NEW_RESULT_ADD;
+    procedure SaveComponentToFile(Component: TComponent; const FileName: TFileName);
+    procedure LoadComponentFromFile(Component: TComponent; const FileName: TFileName);
   public
 
   end;
@@ -79,8 +80,8 @@ end;
 
 procedure TForm1.WMFileSearchStringFinishedHandler (var Msg : TMessage);
 begin
-  ButtonStart.Enabled := true;
-  ButtonStop.Enabled  := false;
+  BitBtnStart.Enabled := true;
+  BitBtnStop.Enabled  := false;
   StatusLabel.Caption := 'Search finished';
 end;
 
@@ -90,8 +91,7 @@ begin
   StatusLabel.Caption := SearchThread.CurentPath;
 end;
 
-
-procedure TForm1.ButtonDirSelectClick(Sender: TObject);
+procedure TForm1.BitBtn1Click(Sender: TObject);
 var
   PathStr : String;
 begin
@@ -102,12 +102,14 @@ begin
   EditPath.Text := PathStr;
 end;
 
-procedure TForm1.ButtonStartClick(Sender: TObject);
+procedure TForm1.BitBtnStartClick(Sender: TObject);
 var
-  SearchedTextStr, DirStr : String;
+  SearchedTextStr, DirStr, ExtStr : String;
+  IsSrchInSubDirs                 : Boolean;
 begin
   SearchedTextStr := EditSearchedText.Text;
   DirStr          := EditPath.Text;
+  ExtStr          := Edit1.Text;
 
   if SearchedTextStr = '' then begin
     ShowMessage('Enter text to find');
@@ -124,32 +126,52 @@ begin
     Exit;
   end;
 
+  if ExtStr ='' then begin
+    ExtStr     :='*.*';
+    Edit1.Text := ExtStr;
+  end;
+
+  IsSrchInSubDirs := CheckBoxSubDirSrch.Checked;
+
   MemoSearchResults.Clear;
 
-  SearchThread := TFileSearchStringThread.Create (DirStr, SearchedTextStr, Self);
+  SearchThread := TFileSearchStringThread.Create (DirStr, SearchedTextStr, ExtStr, Self,IsSrchInSubDirs );
   SearchThread.Start;
 
-  ButtonStart.Enabled := false;
-  ButtonStop.Enabled := true;
+  BitBtnStart.Enabled := false;
+  BitBtnStop.Enabled := true;
 
 end;
 
-procedure TForm1.ButtonStopClick(Sender: TObject);
+procedure TForm1.BitBtnStopClick(Sender: TObject);
 begin
 
   SearchThread.Terminate;
 
-  ButtonStart.Enabled := true;
-  ButtonStop.Enabled  := false;
+  BitBtnStart.Enabled := true;
+  BitBtnStop.Enabled  := false;
 
   StatusLabel.Caption := 'Search terminated by user';
 
 end;
 
 
+procedure TForm1.FormClose(Sender: TObject; var Action: TCloseAction);
+begin
+  SaveComponentToFile(Self,ChangeFileExt(ExtractFileName(Application.ExeName),'')+ '.ini');
+end;
+
+
+procedure TForm1.FormCreate(Sender: TObject);
+begin
+  LoadComponentFromFile(Self,ChangeFileExt(ExtractFileName(Application.ExeName),'')+ '.ini');
+  Self.Show;
+end;
+
+
 procedure TForm1.MemoSearchResultsDblClick(Sender: TObject);
 begin
-      OpenDirFromMemoLine(MemoSearchResults);
+    OpenDirFromMemoLine(MemoSearchResults);
 end;
 
 
@@ -196,5 +218,61 @@ function DeleteLineBreaksSpecialCharacters(const Str: string): string;
     end;
     Result := Str;
  End;
+
+procedure  TForm1.SaveComponentToFile(Component: TComponent; const FileName: TFileName);
+var
+  FileStream : TFileStream;
+  MemStream : TMemoryStream;
+begin
+  MemStream := nil;
+
+  if not Assigned(Component) then
+    raise Exception.Create('Component is not assigned');
+
+  FileStream := TFileStream.Create(FileName,fmCreate);
+  try
+    MemStream := TMemoryStream.Create;
+    MemStream.WriteComponent(Component);
+    MemStream.Position := 0;
+    ObjectBinaryToText(MemStream, FileStream);
+  finally
+    MemStream.Free;
+    FileStream.Free;
+  end;
+end;
+
+procedure  TForm1.LoadComponentFromFile(Component: TComponent; const FileName: TFileName);
+var
+  FileStream : TFileStream;
+  MemStream : TMemoryStream;
+  i: Integer;
+begin
+  MemStream := nil;
+
+  if not Assigned(Component) then
+    raise Exception.Create('Component is not assigned');
+
+  if FileExists(FileName) then
+  begin
+    FileStream := TFileStream.Create(FileName,fmOpenRead);
+    try
+      for i := Component.ComponentCount - 1 downto 0 do
+      begin
+        if Component.Components[i] is TControl then
+          TControl(Component.Components[i]).Parent := nil;
+        Component.Components[i].Free;
+      end;
+
+      MemStream := TMemoryStream.Create;
+      ObjectTextToBinary(FileStream, MemStream);
+      MemStream.Position := 0;
+      MemStream.ReadComponent(Component);
+      Application.InsertComponent(Component);
+    finally
+      MemStream.Free;
+      FileStream.Free;
+    end;
+  end;
+end;
 
 end.
